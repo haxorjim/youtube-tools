@@ -2,12 +2,14 @@ import math
 import os
 import sys
 import httplib2
+import requests
 
 from apiclient.discovery import build
 from apiclient.errors import HttpError
 from oauth2client.client import flow_from_clientsecrets
 from oauth2client.file import Storage
 from oauth2client.tools import argparser, run_flow
+from bs4 import BeautifulSoup
 
 BASE_URL = "https://www.youtube.com/channel/"
 CLIENT_SECRETS_FILE = "client_secrets.json"
@@ -119,9 +121,27 @@ def parse_youtube_subscriptions(subscriptions_response):
 
                 if(len(results["items"]) > 0):
                     last_upload_date = results["items"][0]["snippet"]["publishedAt"]
-                    channels.append("<tr><td>{}</td><td><a href=\"{}{}\">{}</a></td></tr>".format(last_upload_date, BASE_URL, channel_id, title))
+                    channels.append("<tr><td>{}</td><td><a href=\"{}{}\">{}</a></td><td>{}</td></tr>".format(last_upload_date, BASE_URL, channel_id, title, scrape_about_page_links(channel_id)))
 
     return channels
+
+# Scrape about page since this doesn't appear to be in the youtube api anywhere
+def scrape_about_page_links(channel_id):
+    page = requests.get("{}{}/about".format(BASE_URL, channel_id))
+    soup = BeautifulSoup(page.content, 'html.parser')
+
+    # Locate the anchor tags in the channel banner and channel description
+    links = soup.find_all(class_="channel-links-item")
+
+    formatted_links = []
+
+    for link in links:
+        a = link.select("a")[0]
+        title = a["title"]
+        href = a["href"]
+        formatted_links.append("<a href=\"{}{}\">{}</a><br />".format(BASE_URL, href, title))
+
+    return ''.join(set(formatted_links))
 
 
 if __name__ == "__main__":
@@ -144,7 +164,7 @@ if __name__ == "__main__":
     print('Subscriptions found: {}'.format(len(all_channels)))
     print('</pre>')
     print('<table class="table">')
-    print('<thead><tr><th>Last Upload Date</th><th>Channel</th></tr></thead>')
+    print('<thead><tr><th>Last Upload Date</th><th>Channel</th><th>Links</th></tr></thead>')
     print('<tbody>')
 
     [print(channel) for channel in all_channels]
